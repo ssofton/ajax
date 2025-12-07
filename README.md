@@ -1,7 +1,7 @@
 Use this CDN for submitting html form
-< form id="form_id">
-    < input type="-text" name="action" value="form1">
-    < input type="-text" name="xyz" value="xyz">
+< form id="form_id"><br>
+    < input type="-text" name="action" value="form1"><br>
+    < input type="-text" name="xyz" value="xyz"><br>
     < button type="submit" class="btn btn-success">Submit< /button>
 < /form>
 
