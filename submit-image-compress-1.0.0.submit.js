@@ -1,5 +1,5 @@
-// <form class="p-3" id="fund_requestx" method="post" data-ajax="true" data-callback="update"></form>
-$(document).on("click", "button[type='submit'], input[type='submit']", function (e) {
+
+$(document).on("click", "button[type='submit'], input[type='submit']", async function (e) {
 
     let btn = this; // clicked submit button
     let form = $(btn).closest("form"); // find the form
@@ -18,7 +18,7 @@ $(document).on("click", "button[type='submit'], input[type='submit']", function 
     }
     // Get form data
     let formData = new FormData(form[0]);
-    compressImages(formData);
+    await compressImages(formData);
 //    console.log("Clicked Button ID:", btn.id);
 //    console.log("Form ID:", formID);
 //    console.log("Form Data:", [...formData]);
@@ -113,62 +113,71 @@ function getFormData(array) {
     return formData;
 }
 
+
 function compressImages(formData) {
+    //ensureCompressorLoaded(); // 🚫 stops execution if missing
+
     const filesToCompress = {};
 
-    // Extract all image files from FormData
     for (let [key, value] of formData.entries()) {
         if (value instanceof File && value.type.startsWith("image/")) {
-            if (!filesToCompress[key]) {
-                filesToCompress[key] = []; // Initialize array for each key (form field)
-            }
-            filesToCompress[key].push(value); // Store multiple files per key
+            (filesToCompress[key] ??= []).push(value);
         }
     }
 
-    if (Object.keys(filesToCompress).length > 0) {
-        return new Promise((resolve, reject) => {
-            let compressionPromises = [];
-
-            Object.entries(filesToCompress).forEach(([key, files]) => {
-                files.forEach(file => {
-                    compressionPromises.push(
-                            new Promise((resolve, reject) => {
-                                new Compressor(file, {
-                                    quality: 0.5, // Compression quality
-                                    success(result) {
-                                        resolve({key, file: result});
-                                    },
-                                    error(err) {
-//                                    console.error("Compression Error:", err.message);
-                                        var msg = `Use CDN.
-                                        ${err?.message || "Unknown error"}
-                                        https://cdn.jsdelivr.net/npm/compressorjs@1.2.1/dist/compressor.min.js`;
-                                        toastalert.showToast({status: "error", message: msg});
-                                        reject(err);
-                                    }
-                                });
-                            })
-                            );
-                });
-            });
-
-            // Process all compressions
-            Promise.all(compressionPromises).then((compressedFiles) => {
-                // Delete existing file entries dynamically
-                Object.keys(filesToCompress).forEach(key => {
-                    formData.delete(key); // Removes only relevant keys
-                });
-
-                // Append all compressed files correctly
-                compressedFiles.forEach(({ key, file }) => {
-                    formData.append(key, file, file.name);
-                });
-
-                resolve();
-            }).catch(reject);
-        });
-    } else {
-        return Promise.resolve(); // If no images, resolve immediately
+    if (!Object.keys(filesToCompress).length) {
+        return Promise.resolve();
     }
+
+    const compressionPromises = [];
+
+    Object.entries(filesToCompress).forEach(([key, files]) => {
+        files.forEach(file => {
+            compressionPromises.push(
+                    new Promise((resolve, reject) => {
+                        try {
+                            new Compressor(file, {
+                                quality: 0.5,
+                                success(result) {
+                                    const compressedFile = new File(
+                                            [result],
+                                            file.name,
+                                            {type: result.type}
+                                    );
+                                    resolve({key, file: compressedFile});
+                                },
+                                error(err) {
+                                    const msg = `CompressorJS is not loaded.
+Include any valid CompressorJS CDN:
+https://cdn.jsdelivr.net/npm/compressorjs/dist/compressor.min.js`;
+
+                            toastalert.showToast({
+                                status: "error",
+                                message: msg
+                            });
+                                    reject(err);
+                                }
+                            });
+                        } catch (err) {
+                            const msg = `CompressorJS is not loaded.
+Include any valid CompressorJS CDN:
+https://cdn.jsdelivr.net/npm/compressorjs/dist/compressor.min.js`;
+
+                            toastalert.showToast({
+                                status: "error",
+                                message: msg
+                            });
+                            reject(err);
+                        }
+                    })
+                    );
+        });
+    });
+
+    return Promise.all(compressionPromises).then(compressedFiles => {
+        Object.keys(filesToCompress).forEach(key => formData.delete(key));
+        compressedFiles.forEach(({ key, file }) => {
+            formData.append(key, file, file.name);
+        });
+    });
 }
